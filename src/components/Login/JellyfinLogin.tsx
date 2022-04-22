@@ -284,7 +284,7 @@ const JellyfinLogin: React.FC<JellyfinLoginProps> = ({
                           buttonType="ghost"
                           href={
                             settings.currentSettings.jellyfinHost +
-                            '/web/#!/forgotpassword.html'
+                            '/web/index.html#!/forgotpassword.html'
                           }
                         >
                           {intl.formatMessage(messages.forgotpassword)}
