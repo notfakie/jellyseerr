@@ -35,6 +35,14 @@ export interface PlexSettings {
   webAppUrl?: string;
 }
 
+export interface JellyfinSettings {
+  name: string;
+  hostname: string;
+  externalHostname?: string;
+  libraries: Library[];
+  serverId: string;
+}
+
 export interface TautulliSettings {
   hostname?: string;
   port?: number;
@@ -249,6 +257,8 @@ export type JobId =
   | 'sonarr-scan'
   | 'download-sync'
   | 'download-sync-reset'
+  | 'jellyfin-recently-added-sync'
+  | 'jellyfin-full-sync'
   | 'image-cache-cleanup';
 
 interface AllSettings {
@@ -257,6 +267,7 @@ interface AllSettings {
   vapidPrivate: string;
   main: MainSettings;
   plex: PlexSettings;
+  jellyfin: JellyfinSettings;
   tautulli: TautulliSettings;
   radarr: RadarrSettings[];
   sonarr: SonarrSettings[];
@@ -303,6 +314,13 @@ class Settings {
         port: 32400,
         useSsl: false,
         libraries: [],
+      },
+      jellyfin: {
+        name: '',
+        hostname: '',
+        externalHostname: '',
+        libraries: [],
+        serverId: '',
       },
       tautulli: {},
       radarr: [],
@@ -416,6 +434,12 @@ class Settings {
         'download-sync-reset': {
           schedule: '0 0 1 * * *',
         },
+        'jellyfin-recently-added-sync': {
+          schedule: '0 */5 * * * *',
+        },
+        'jellyfin-full-sync': {
+          schedule: '0 0 3 * * *',
+        },
         'image-cache-cleanup': {
           schedule: '0 0 5 * * *',
         },
@@ -444,6 +468,14 @@ class Settings {
 
   set plex(data: PlexSettings) {
     this.data.plex = data;
+  }
+
+  get jellyfin(): JellyfinSettings {
+    return this.data.jellyfin;
+  }
+
+  set jellyfin(data: JellyfinSettings) {
+    this.data.jellyfin = data;
   }
 
   get tautulli(): TautulliSettings {

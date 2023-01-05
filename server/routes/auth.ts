@@ -1,3 +1,4 @@
+import JellyfinAPI from '@server/api/jellyfin';
 import PlexTvAPI from '@server/api/plextv';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
@@ -221,6 +222,223 @@ authRoutes.get('/plex/unlink', isAuthenticated(), async (req, res, next) => {
       status: 500,
       message: 'Unable to unlink plex account.',
     });
+  }
+});
+
+authRoutes.post('/jellyfin', async (req, res, next) => {
+  const settings = getSettings();
+  const userRepository = getRepository(User);
+  const body = req.body as {
+    username?: string;
+    password?: string;
+    hostname?: string;
+    email?: string;
+  };
+
+  //Make sure jellyfin login is enabled, but only if jellyfin is not already configured
+  // if (
+  //   settings.main.mediaServerType !== MediaServerType.JELLYFIN &&
+  //   settings.jellyfin.hostname !== ''
+  // ) {
+  //   return res.status(500).json({ error: 'Jellyfin login is disabled' });
+  // } else if (!body.username) {
+  if (!body.username) {
+    return res.status(500).json({ error: 'You must provide an username' });
+  } else if (settings.jellyfin.hostname === '' && !body.hostname) {
+    return res.status(500).json({ error: 'No hostname provided.' });
+  }
+
+  try {
+    const hostname =
+      settings.jellyfin.hostname !== ''
+        ? settings.jellyfin.hostname
+        : body.hostname ?? '';
+    const { externalHostname } = getSettings().jellyfin;
+
+    const mainUser = await userRepository.findOneOrFail({
+      select: { id: true, email: true },
+      where: { id: 1 },
+    });
+
+    if (!mainUser) {
+      logger.error(
+        'Sign-in attempt from Jellyfin user before local user was setup',
+        {
+          label: 'API',
+          ip: req.ip,
+        }
+      );
+      return next({
+        status: 403,
+        message: 'Access denied.',
+      });
+    }
+
+    // Try to find deviceId that corresponds to jellyfin user, else generate a new one
+    let user = await userRepository.findOne({
+      where: { jellyfinUsername: body.username },
+    });
+
+    let deviceId = '';
+    if (user) {
+      deviceId = user.jellyfinDeviceId ?? '';
+    } else {
+      deviceId = Buffer.from(`BOT_overseerr_${body.username ?? ''}`).toString(
+        'base64'
+      );
+    }
+
+    // First we need to attempt to log the user in to jellyfin
+    const jellyfinserver = new JellyfinAPI(hostname ?? '', undefined, deviceId);
+    let jellyfinHost =
+      externalHostname && externalHostname.length > 0
+        ? externalHostname
+        : hostname;
+
+    jellyfinHost = jellyfinHost.endsWith('/')
+      ? jellyfinHost.slice(0, -1)
+      : jellyfinHost;
+
+    const account = await jellyfinserver.login(body.username, body.password);
+
+    // If we are already logged in, we should just get the currently logged in user
+    // otherwise we will try to match to an existing users jellyfin ID
+    if (req.user) {
+      user = await userRepository.findOneBy({ id: req.user.id });
+    } else {
+      user = await userRepository
+        .createQueryBuilder('user')
+        .where('user.jellyfinUserId = :id', { id: account.User.Id })
+        .getOne();
+    }
+
+    if (user) {
+      // Let's check if their authtoken is up to date
+      if (user.jellyfinAuthToken !== account.AccessToken) {
+        user.jellyfinAuthToken = account.AccessToken;
+      }
+
+      //set jellyfin userId for initial setup
+      if (!user.jellyfinUserId) {
+        user.jellyfinUserId = account.User.Id;
+      }
+      user.jellyfinDeviceId = deviceId;
+
+      // Update the users avatar with their jellyfin profile pic (incase it changed)
+      if (account.User.PrimaryImageTag) {
+        user.avatar = `${jellyfinHost}/Users/${account.User.Id}/Images/Primary/?tag=${account.User.PrimaryImageTag}&quality=90`;
+      } else {
+        user.avatar = '/os_logo_square.png';
+      }
+
+      user.jellyfinUsername = account.User.Name;
+
+      if (user.username === account.User.Name) {
+        user.username = '';
+      }
+
+      //Update hostname in settings if it doesn't exist (initial configuration)
+      if (settings.jellyfin.hostname === '' && body.hostname) {
+        // settings.main.mediaServerType = MediaServerType.JELLYFIN;
+        settings.jellyfin.hostname = body.hostname ?? '';
+        settings.jellyfin.serverId = account.User.ServerId;
+        settings.save();
+        // startJobs();
+      }
+
+      await userRepository.save(user);
+    } else if (!settings.main.newPlexLogin) {
+      logger.warn(
+        'Failed sign-in attempt by unimported Jellyfin user with access to the media server',
+        {
+          label: 'API',
+          ip: req.ip,
+          jellyfinUserId: account.User.Id,
+          jellyfinUsername: account.User.Name,
+        }
+      );
+      return next({
+        status: 403,
+        message: 'Access denied.',
+      });
+    } else {
+      logger.info(
+        'Sign-in attempt from Jellyfin user with access to the media server; creating Overseerr user',
+        {
+          label: 'API',
+          ip: req.ip,
+          jellyfinUsername: account.User.Name,
+        }
+      );
+
+      if (!body.email) {
+        throw new Error('add_email');
+      }
+
+      user = new User({
+        email: body.email,
+        jellyfinUsername: account.User.Name,
+        jellyfinUserId: account.User.Id,
+        jellyfinDeviceId: deviceId,
+        jellyfinAuthToken: account.AccessToken,
+        permissions: settings.main.defaultPermissions,
+        avatar: account.User.PrimaryImageTag
+          ? `${jellyfinHost}/Users/${account.User.Id}/Images/Primary/?tag=${account.User.PrimaryImageTag}&quality=90`
+          : '/os_logo_square.png',
+      });
+      await userRepository.save(user);
+    }
+
+    if (!user) {
+      logger.error(
+        'Sign-in attempt from Jellyfin user without a matching local Overseerr user',
+        {
+          label: 'API',
+          ip: req.ip,
+          jellyfinUsername: account.User.Name,
+        }
+      );
+      return next({
+        status: 403,
+        message: 'Access denied.',
+      });
+    }
+
+    // Set logged in session
+    if (req.session) {
+      req.session.userId = user?.id;
+    }
+
+    return res.status(200).json(user?.filter() ?? {});
+  } catch (e) {
+    if (e.message === 'Unauthorized') {
+      logger.info(
+        'Failed login attempt from user with incorrect Jellyfin credentials',
+        {
+          label: 'Auth',
+          account: {
+            ip: req.ip,
+            email: body.username,
+            password: '__REDACTED__',
+          },
+        }
+      );
+      return next({
+        status: 401,
+        message: 'Unauthorized',
+      });
+    } else if (e.message === 'add_email') {
+      return next({
+        status: 406,
+        message: 'CREDENTIAL_ERROR_ADD_EMAIL',
+      });
+    } else {
+      logger.error(e.message, { label: 'Auth' });
+      return next({
+        status: 500,
+        message: 'Something went wrong.',
+      });
+    }
   }
 });
 

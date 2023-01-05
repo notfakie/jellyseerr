@@ -38,6 +38,8 @@ export interface PublicSettingsResponse {
   emailEnabled: boolean;
   newPlexLogin: boolean;
   plexLoginEnabled: boolean;
+  jellyfinHost?: string;
+  jellyfinServerName?: string;
 }
 
 export interface CacheItem {

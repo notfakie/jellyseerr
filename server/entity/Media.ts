@@ -138,6 +138,12 @@ class Media {
   @Column({ nullable: true })
   public ratingKey4k?: string;
 
+  @Column({ nullable: true })
+  public jellyfinMediaId?: string;
+
+  @Column({ nullable: true })
+  public jellyfinMediaId4k?: string;
+
   public serviceUrl?: string;
   public serviceUrl4k?: string;
   public downloadStatus?: DownloadingItem[] = [];
@@ -152,11 +158,12 @@ class Media {
   public tautulliUrl?: string;
   public tautulliUrl4k?: string;
 
+  public mediaUrl?: string;
+
   constructor(init?: Partial<Media>) {
     Object.assign(this, init);
   }
 
-  @AfterLoad()
   public setPlexUrls(): void {
     const { machineId, webAppUrl } = getSettings().plex;
     const { externalUrl: tautulliUrl } = getSettings().tautulli;
@@ -187,6 +194,48 @@ class Media {
       if (tautulliUrl) {
         this.tautulliUrl4k = `${tautulliUrl}/info?rating_key=${this.ratingKey4k}`;
       }
+    }
+  }
+
+  public setJellyfinUrls(): void {
+    const pageName = 'details';
+    const { serverId, hostname, externalHostname } = getSettings().jellyfin;
+    let jellyfinHost =
+      externalHostname && externalHostname.length > 0
+        ? externalHostname
+        : hostname;
+
+    jellyfinHost = jellyfinHost.endsWith('/')
+      ? jellyfinHost.slice(0, -1)
+      : jellyfinHost;
+
+    if (this.jellyfinMediaId) {
+      this.mediaUrl = `${jellyfinHost}/web/index.html#!/${pageName}?id=${this.jellyfinMediaId}&context=home&serverId=${serverId}`;
+    }
+  }
+
+  public setEmbyUrls(): void {
+    this.setJellyfinUrls();
+    const pageName = 'item';
+    if (this.mediaUrl) {
+      this.mediaUrl.replace(
+        '/index.html#!/details',
+        `/index.html#!/${pageName}`
+      );
+    }
+  }
+
+  @AfterLoad()
+  public setMediaUrls(): void {
+    this.setPlexUrls();
+
+    //currently the only difference between Jellyfin & Emby is the playback URL
+    // so as a quick support hack support we clobber it based on the below ENV
+    // TODO add Emby as separate server type
+    if (process.env.JELLYFIN_TYPE === 'emby') {
+      this.setEmbyUrls();
+    } else {
+      this.setJellyfinUrls();
     }
   }
 

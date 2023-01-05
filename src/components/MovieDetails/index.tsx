@@ -45,6 +45,7 @@ import type { MovieDetails as MovieDetailsType } from '@server/models/Movie';
 import { hasFlag } from 'country-flag-icons';
 import 'country-flag-icons/3x2/flags.css';
 import { uniqBy } from 'lodash';
+import getConfig from 'next/config';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
@@ -68,6 +69,7 @@ const messages = defineMessages({
   studio: '{studioCount, plural, one {Studio} other {Studios}}',
   viewfullcrew: 'View Full Crew',
   playonplex: 'Play on Plex',
+  playonJellyfin: 'Play on {mediaServerName}',
   play4konplex: 'Play in 4K on Plex',
   markavailable: 'Mark as Available',
   mark4kavailable: 'Mark as Available in 4K',
@@ -92,6 +94,7 @@ interface MovieDetailsProps {
 
 const MovieDetails = ({ movie }: MovieDetailsProps) => {
   const settings = useSettings();
+  const { publicRuntimeConfig } = getConfig();
   const { user, hasPermission } = useUser();
   const router = useRouter();
   const intl = useIntl();
@@ -141,6 +144,24 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
 
   const showAllStudios = data.productionCompanies.length <= minStudios + 1;
   const mediaLinks: PlayButtonLink[] = [];
+
+  const mediaUrl = data?.mediaInfo?.mediaUrl;
+
+  if (
+    mediaUrl &&
+    hasPermission([Permission.REQUEST, Permission.REQUEST_MOVIE], {
+      type: 'or',
+    })
+  ) {
+    mediaLinks.push({
+      text: intl.formatMessage(messages.playonJellyfin, {
+        mediaServerName:
+          publicRuntimeConfig.JELLYFIN_TYPE == 'emby' ? 'Emby' : 'Jellyfin',
+      }),
+      url: mediaUrl,
+      svg: <PlayIcon />,
+    });
+  }
 
   if (
     plexUrl &&

@@ -1,6 +1,8 @@
+import JellyfinLogo from '@app/assets/services/jellyfin.svg';
 import PlexLogo from '@app/assets/services/plex.svg';
 import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
+import SettingsJellyfin from '@app/components/Settings/SettingsJellyfin';
 import SettingsPlex from '@app/components/Settings/SettingsPlex';
 import { CheckCircleIcon } from '@heroicons/react/solid';
 import { useState } from 'react';
@@ -19,13 +21,14 @@ type ConfigureMediaServersProps = {
 };
 
 type ConfigureStatus = {
-  configuring?: 'plex';
+  configuring?: 'plex' | 'jellyfin';
 };
 
 const ConfigureMediaServers = ({ onComplete }: ConfigureMediaServersProps) => {
   const intl = useIntl();
   const [configureStatus, setConfigureStatus] = useState<ConfigureStatus>();
   const [plexConfigured, setPlexConfigured] = useState(false);
+  const [jellyfinConfigured, setJellyfinConfigured] = useState(false);
   return (
     <>
       {configureStatus?.configuring === 'plex' && (
@@ -50,6 +53,37 @@ const ConfigureMediaServers = ({ onComplete }: ConfigureMediaServersProps) => {
                 {intl.formatMessage(messages.continue)}
               </Button>
               {!plexConfigured && (
+                <Button onClick={() => setConfigureStatus({})}>
+                  {intl.formatMessage(messages.goback)}
+                </Button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+      {configureStatus?.configuring === 'jellyfin' && (
+        <>
+          <SettingsJellyfin onComplete={() => setJellyfinConfigured(true)} />
+
+          <div className="mt-4 text-sm text-gray-500">
+            <span className="mr-2">
+              <Badge>{intl.formatMessage(messages.tip)}</Badge>
+            </span>
+            {intl.formatMessage(messages.scanbackground)}
+          </div>
+          <div className="actions">
+            <div className="flex flex-row-reverse justify-between">
+              <Button
+                buttonType="primary"
+                disabled={!jellyfinConfigured}
+                onClick={() => {
+                  setConfigureStatus({});
+                  setJellyfinConfigured(true);
+                }}
+              >
+                {intl.formatMessage(messages.continue)}
+              </Button>
+              {!jellyfinConfigured && (
                 <Button onClick={() => setConfigureStatus({})}>
                   {intl.formatMessage(messages.goback)}
                 </Button>
@@ -85,11 +119,34 @@ const ConfigureMediaServers = ({ onComplete }: ConfigureMediaServersProps) => {
                 )}
               </div>
             </div>
+
+            <div className="w-52 divide-y divide-gray-700 rounded border border-gray-700 bg-gray-800 bg-opacity-20">
+              <div className="flex items-center justify-center p-8">
+                <JellyfinLogo className="w-full" />
+              </div>
+              <div className="flex items-center justify-center space-x-2 p-2">
+                {jellyfinConfigured ? (
+                  <>
+                    <CheckCircleIcon className="w-6 text-green-500" />
+                    <span>Configured</span>
+                  </>
+                ) : (
+                  <Button
+                    className="w-full"
+                    onClick={() =>
+                      setConfigureStatus({ configuring: 'jellyfin' })
+                    }
+                  >
+                    Configure Jellyfin
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
           <div className="actions">
             <div className="flex justify-end">
               <Button buttonType="primary" onClick={() => onComplete()}>
-                {plexConfigured
+                {plexConfigured || jellyfinConfigured
                   ? 'Continue'
                   : 'Continue without a Media Server'}
               </Button>

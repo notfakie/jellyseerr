@@ -46,6 +46,7 @@ import type { Crew } from '@server/models/common';
 import type { TvDetails as TvDetailsType } from '@server/models/Tv';
 import { hasFlag } from 'country-flag-icons';
 import 'country-flag-icons/3x2/flags.css';
+import getConfig from 'next/config';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
@@ -68,6 +69,7 @@ const messages = defineMessages({
   network: '{networkCount, plural, one {Network} other {Networks}}',
   viewfullcrew: 'View Full Crew',
   playonplex: 'Play on Plex',
+  playonJellyfin: 'Play on {mediaServerName}',
   play4konplex: 'Play in 4K on Plex',
   seasons: '{seasonCount, plural, one {# Season} other {# Seasons}}',
   episodeRuntime: 'Episode Runtime',
@@ -92,6 +94,7 @@ interface TvDetailsProps {
 
 const TvDetails = ({ tv }: TvDetailsProps) => {
   const settings = useSettings();
+  const { publicRuntimeConfig } = getConfig();
   const { user, hasPermission } = useUser();
   const router = useRouter();
   const intl = useIntl();
@@ -139,6 +142,18 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
   }
 
   const mediaLinks: PlayButtonLink[] = [];
+
+  const mediaUrl = data?.mediaInfo?.mediaUrl;
+  if (mediaUrl) {
+    mediaLinks.push({
+      text: intl.formatMessage(messages.playonJellyfin, {
+        mediaServerName:
+          publicRuntimeConfig.JELLYFIN_TYPE == 'emby' ? 'Emby' : 'Jellyfin',
+      }),
+      url: mediaUrl,
+      svg: <PlayIcon />,
+    });
+  }
 
   if (plexUrl) {
     mediaLinks.push({

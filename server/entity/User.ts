@@ -66,6 +66,9 @@ export class User {
   public plexUsername?: string | null;
 
   @Column({ nullable: true })
+  public jellyfinUsername?: string;
+
+  @Column({ nullable: true })
   public username?: string;
 
   @Column({ nullable: true })
@@ -79,6 +82,15 @@ export class User {
 
   @Column({ type: 'int', nullable: true })
   public plexId?: number | null;
+
+  @Column({ nullable: true })
+  public jellyfinUserId?: string;
+
+  @Column({ nullable: true })
+  public jellyfinDeviceId?: string;
+
+  @Column({ nullable: true })
+  public jellyfinAuthToken?: string;
 
   @Column({ type: 'varchar', nullable: true, select: false })
   public plexToken?: string | null;
